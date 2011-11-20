@@ -1192,7 +1192,9 @@ class XMLStream(object):
         Arguments:
             xml -- The XML stanza to analyze.
         """
-        log.debug("RECV: %s" , tostring(xml,
+        # tostring is very expensive.
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("RECV: %s" , tostring(xml,
                                             xmlns=self.default_ns,
                                             stream=self))
         # Apply any preprocessing filters.
