@@ -24,6 +24,14 @@ log = logging.getLogger(__name__)
 XML_TYPE = type(ET.Element('xml'))
 
 
+def clear_cache(fcn):
+    def newf(self, *args, **kwargs):
+        rval = fcn(self, *args, **kwargs)
+        self._getitem_cache.clear()
+        return rval
+    return newf
+
+
 def register_stanza_plugin(stanza, plugin, iterable=False, overrides=False):
     """
     Associate a stanza object as a plugin for another stanza.
@@ -237,7 +245,8 @@ class ElementBase(object):
     subitem = set()
     is_extension = False
     xml_ns = 'http://www.w3.org/XML/1998/namespace'
-
+    
+    @clear_cache
     def __init__(self, xml=None, parent=None):
         """
         Create a new stanza object.
@@ -246,6 +255,7 @@ class ElementBase(object):
             xml    -- Initialize the stanza with optional existing XML.
             parent -- Optional stanza object that contains this stanza.
         """
+        self._getitem_cache = {}
         self.xml = xml
         self.plugins = OrderedDict()
         self.iterables = []
@@ -277,6 +287,7 @@ class ElementBase(object):
                     self.iterables.append(sub(child, self))
                     break
 
+    @clear_cache
     def setup(self, xml=None):
         """
         Initialize the stanza's XML contents.
@@ -320,6 +331,7 @@ class ElementBase(object):
         """
         return self.init_plugin(attrib)
 
+    @clear_cache
     def init_plugin(self, attrib):
         """
         Enable and initialize a stanza plugin.
@@ -351,6 +363,7 @@ class ElementBase(object):
             values['substanzas'] = iterables
         return values
 
+    @clear_cache
     def _set_stanza_values(self, values):
         """
         Set multiple stanza interface values using a dictionary.
@@ -392,7 +405,16 @@ class ElementBase(object):
                     self.plugins[interface].values = value
         return self
 
+
     def __getitem__(self, attrib):
+        if attrib not in self._getitem_cache:
+            self._getitem_cache[attrib] = self.__getitem_internal(attrib)
+        return self._getitem_cache[attrib]
+
+
+    
+
+    def __getitem_internal(self, attrib):
         """
         Return the value of a stanza interface using dictionary-like syntax.
 
@@ -451,6 +473,7 @@ class ElementBase(object):
         else:
             return ''
 
+    @clear_cache
     def __setitem__(self, attrib, value):
         """
         Set the value of a stanza interface using dictionary-like syntax.
@@ -480,6 +503,11 @@ class ElementBase(object):
             attrib -- The name of the stanza interface to modify.
             value  -- The new value of the stanza interface.
         """
+        # TODO: we should be able to delete only the attribute being set,
+        #       but I am not convinced this is safe in all circumstances.
+        #       setitem should be rare, anyway.
+
+
         if attrib in self.interfaces:
             if value is not None:
                 set_method = "set_%s" % attrib.lower()
@@ -512,6 +540,7 @@ class ElementBase(object):
             self.plugins[attrib][attrib] = value
         return self
 
+    @clear_cache
     def __delitem__(self, attrib):
         """
         Delete the value of a stanza interface using dictionary-like syntax.
@@ -575,6 +604,7 @@ class ElementBase(object):
                     pass
         return self
 
+    @clear_cache
     def _set_attr(self, name, value):
         """
         Set the value of a top level attribute of the underlying XML object.
@@ -592,6 +622,7 @@ class ElementBase(object):
         else:
             self.xml.attrib[name] = value
 
+    @clear_cache
     def _del_attr(self, name):
         """
         Remove a top level attribute of the underlying XML object.
@@ -638,6 +669,7 @@ class ElementBase(object):
         else:
             return stanza.text
 
+    @clear_cache
     def _set_sub_text(self, name, text=None, keep=False):
         """
         Set the text contents of a sub element.
@@ -681,6 +713,7 @@ class ElementBase(object):
         element.text = text
         return element
 
+    @clear_cache
     def _del_sub(self, name, all=False):
         """
         Remove sub elements that match the given name or XPath.
@@ -719,6 +752,7 @@ class ElementBase(object):
                 # after deleting the first level of elements.
                 return
 
+    @clear_cache
     def match(self, xpath):
         """
         Compare a stanza object with an XPath expression. If the XPath matches
@@ -839,6 +873,7 @@ class ElementBase(object):
             out.append('substanzas')
         return out
 
+    @clear_cache
     def append(self, item):
         """
         Append either an XML object or a substanza to this stanza object.
@@ -852,6 +887,7 @@ class ElementBase(object):
             item -- Either an XML object or a stanza object to add to
                     this stanza's contents.
         """
+
         if not isinstance(item, ElementBase):
             if type(item) == XML_TYPE:
                 return self.appendxml(item)
@@ -861,6 +897,7 @@ class ElementBase(object):
         self.iterables.append(item)
         return self
 
+    @clear_cache
     def appendxml(self, xml):
         """
         Append an XML object to the stanza's XML.
@@ -946,6 +983,7 @@ class ElementBase(object):
                             and child and parent namespaces are known not to
                             always match. Defaults to True.
         """
+
         fixed = []
         # Split the XPath into a series of blocks, where a block
         # is started by an element with a namespace.
